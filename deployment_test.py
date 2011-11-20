@@ -51,36 +51,41 @@ class DeploymentTestCase(unittest.TestCase):
         self.shell = self.__spawn_shell()
         self.shell.cmd('pwd')
         self.origdir = self.shell.before.splitlines()[1]
-
+        self.shell.cmd('cd %s' % self.tempdir)
 
     def __git_clone(self):
-        self.shell.cmd('cd %s' % self.tempdir)
         self.shell.check_cmd('git clone %s' % repository_url)
         self.shell.check_cmd('cd universitytimetable')
         self.shell.check_cmd('git checkout %s' % self.branch)
         self.shell.check_cmd('cp %s/local_settings.py ./' % self.origdir)
 
+    def __create_virtualenv(self):
+        self.shell.check_cmd('virtualenv --no-site-packages venv')
+        self.shell.check_cmd('. venv/bin/activate')
+
+    def __install_requirements(self):
+        self.shell.check_cmd('pip install -r requirements.txt')
 
     def __syncdb(self):
-        self.shell.check_cmd('python2.6 manage.py syncdb --noinput')
-
+        self.shell.check_cmd('python manage.py syncdb --noinput')
 
     def __run_django_tests(self):
-        self.shell.check_cmd('python2.6 manage.py test')
-
+        self.shell.check_cmd('python manage.py test')
 
     def __test_dev_server(self):
-        self.shell.sendline('python2.6 manage.py runserver')
+        self.shell.sendline('python manage.py runserver')
         self.shell.expect_exact('Quit the server with CONTROL-C.')
         response = urllib2.urlopen('http://127.0.0.1:8000').read()
         title = re.findall(r'<title>([^<]*)</title>', response)[0]
-        self.shell.expect_exact('GET / HTTP/1.1')
+        self.shell.expect_exact('GET / HTTP/1.1', timeout=2)
         self.shell.sendcontrol('c')
         self.shell.waitprompt()
 
 
     def test_main(self):
+        self.__create_virtualenv()
         self.__git_clone()
+        self.__install_requirements()
         self.__syncdb()
         #self.__run_django_tests()
         self.__test_dev_server()

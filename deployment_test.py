@@ -1,6 +1,6 @@
 import sys
 from pexpect import spawn
-from tempfile import mkdtemp
+from tempfile import mkdtemp, gettempdir
 from shutil import rmtree
 import types
 import urllib2
@@ -65,6 +65,9 @@ class DeploymentTestCase(unittest.TestCase):
         self.shell.check_cmd('. venv/bin/activate')
 
     def __install_requirements(self):
+        self.shell.cmd(
+                'export PIP_DOWNLOAD_CACHE=%s/pip_download_cache' % gettempdir()
+                )
         self.shell.check_cmd('pip install -r requirements.txt')
 
     def __syncdb(self):

@@ -9,7 +9,7 @@ import re
 repository_url = 'git://github.com/troyand/universitytimetable.git'
 
 
-def main():
+def main(branch):
     tempdir = mkdtemp()
     print 'Using temporary directory: %s' % tempdir
     try:
@@ -21,29 +21,31 @@ def main():
                 lambda self: self.expect_exact(self.prompt),
                 shell
                 )
+        shell.cmd = types.MethodType(
+                lambda self, cmd:
+                self.sendline(cmd) and self.waitprompt(),
+                shell
+                )
         shell.sendline('export PS1="%s"' % shell.prompt)
         shell.waitprompt()
         shell.waitprompt()
-        shell.sendline('pwd')
-        shell.waitprompt()
+        shell.cmd('pwd')
         origdir = shell.before.splitlines()[1]
-        shell.sendline('cd %s' % tempdir)
-        shell.waitprompt()
-        shell.sendline('pwd')
-        shell.waitprompt()
-        shell.sendline('git clone %s' % repository_url)
-        shell.waitprompt()
-        shell.sendline('echo $?')
-        shell.waitprompt()
+        shell.cmd('cd %s' % tempdir)
+        shell.cmd('pwd')
+        shell.cmd('git clone %s' % repository_url)
+        shell.cmd('echo $?')
         result = int(shell.before.splitlines()[1])
         if result != 0:
             raise Exception('git clone failed')
-        shell.sendline('ls')
-        shell.waitprompt()
-        shell.sendline('cd universitytimetable')
-        shell.waitprompt()
-        shell.sendline('cp %s/local_settings.py ./' % origdir)
-        shell.waitprompt()
+        shell.cmd('ls')
+        shell.cmd('cd universitytimetable')
+        shell.cmd('git checkout %s' % branch)
+        shell.cmd('echo $?')
+        result = int(shell.before.splitlines()[1])
+        if result != 0:
+            raise Exception('git branch switch failed for %s' % branch)
+        shell.cmd('cp %s/local_settings.py ./' % origdir)
         shell.sendline('python2.6 manage.py runserver')
         shell.expect_exact('Quit the server with CONTROL-C.')
         try:
@@ -54,14 +56,20 @@ def main():
             print 'URLError:', e.reason
         except urllib2.HTTPError, e:
             print 'HTTPError', e.code
+        shell.expect_exact('GET / HTTP/1.1')
         shell.sendcontrol('c')
         shell.waitprompt()
-    except:
+    except Exception, e:
         print 'Exception caught'
+        print e
     print
     print 'Removing the temporary directory %s and its contents' % tempdir
     rmtree(tempdir)
 
 
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) == 2:
+        branch = sys.argv[1]
+    else:
+        branch = 'master'
+    main(branch)

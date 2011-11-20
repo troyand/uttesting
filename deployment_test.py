@@ -6,6 +6,7 @@ import types
 import urllib2
 import re
 import unittest
+import time
 
 repository_url = 'git://github.com/troyand/universitytimetable.git'
 
@@ -75,6 +76,8 @@ class DeploymentTestCase(unittest.TestCase):
     def __test_dev_server(self):
         self.shell.sendline('python manage.py runserver')
         self.shell.expect_exact('Quit the server with CONTROL-C.')
+        # workaround for fast boxes
+        time.sleep(0.5)
         response = urllib2.urlopen('http://127.0.0.1:8000').read()
         title = re.findall(r'<title>([^<]*)</title>', response)[0]
         self.shell.expect_exact('GET / HTTP/1.1', timeout=2)

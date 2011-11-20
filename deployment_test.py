@@ -5,29 +5,27 @@ from shutil import rmtree
 import types
 import urllib2
 import re
+import unittest
 
 repository_url = 'git://github.com/troyand/universitytimetable.git'
 
-def check_cmd(self, cmd):
-    self.cmd(cmd)
-    cmd_output = self.before
-    self.cmd('echo $?')
-    cmd_result = int(self.before.splitlines()[1])
-    if cmd_result != 0:
-        raise Exception(
-                '%s: failed with exit status %d' % (
-                    cmd,
-                    cmd_result,
-                    )
-                )
+class DeploymentTestCase(unittest.TestCase):
+    def __spawn_shell(self):
+        def check_cmd(self, cmd):
+            self.cmd(cmd)
+            cmd_output = self.before
+            self.cmd('echo $?')
+            cmd_result = int(self.before.splitlines()[1])
+            if cmd_result != 0:
+                raise AssertionError(
+                        '%s\nExpected exit status 0, got %d' % (
+                            cmd,
+                            cmd_result,
+                            )
+                        )
 
-
-def main(branch):
-    tempdir = mkdtemp()
-    print 'Using temporary directory: %s' % tempdir
-    try:
         shell = spawn('/bin/sh')
-        shell.logfile_read = sys.stdout
+        shell.logfile_read = open('shell_output.log', 'w')
         shell.expect_exact('$')
         shell.prompt = '###> '
         shell.waitprompt = types.MethodType(
@@ -46,39 +44,59 @@ def main(branch):
         shell.sendline('export PS1="%s"' % shell.prompt)
         shell.waitprompt()
         shell.waitprompt()
-        shell.cmd('pwd')
-        origdir = shell.before.splitlines()[1]
-        shell.cmd('cd %s' % tempdir)
-        shell.cmd('pwd')
-        shell.check_cmd('git clone %s' % repository_url)
-        shell.cmd('ls')
-        shell.cmd('cd universitytimetable')
-        shell.check_cmd('git checkout %s' % branch)
-        shell.cmd('cp %s/local_settings.py ./' % origdir)
-        shell.sendline('python2.6 manage.py runserver')
-        shell.expect_exact('Quit the server with CONTROL-C.')
-        try:
-            response = urllib2.urlopen('http://127.0.0.1:8000').read()
-            title = re.findall(r'<title>([^<]*)</title>', response)[0]
-            print 'Fetched response with title: %s' % title
-        except urllib2.URLError, e:
-            print 'URLError:', e.reason
-        except urllib2.HTTPError, e:
-            print 'HTTPError', e.code
-        shell.expect_exact('GET / HTTP/1.1')
-        shell.sendcontrol('c')
-        shell.waitprompt()
-    except Exception, e:
-        print 'Exception caught'
-        print e
-    print
-    print 'Removing the temporary directory %s and its contents' % tempdir
-    rmtree(tempdir)
+        return shell
+
+    def setUp(self):
+        self.tempdir = mkdtemp()
+        self.shell = self.__spawn_shell()
+        self.shell.cmd('pwd')
+        self.origdir = self.shell.before.splitlines()[1]
+
+
+    def __git_clone(self):
+        self.shell.cmd('cd %s' % self.tempdir)
+        self.shell.check_cmd('git clone %s' % repository_url)
+        self.shell.check_cmd('cd universitytimetable')
+        self.shell.check_cmd('git checkout %s' % self.branch)
+        self.shell.check_cmd('cp %s/local_settings.py ./' % self.origdir)
+
+
+    def __syncdb(self):
+        self.shell.check_cmd('python2.6 manage.py syncdb --noinput')
+
+
+    def __run_django_tests(self):
+        self.shell.check_cmd('python2.6 manage.py test')
+
+
+    def __test_dev_server(self):
+        self.shell.sendline('python2.6 manage.py runserver')
+        self.shell.expect_exact('Quit the server with CONTROL-C.')
+        response = urllib2.urlopen('http://127.0.0.1:8000').read()
+        title = re.findall(r'<title>([^<]*)</title>', response)[0]
+        self.shell.expect_exact('GET / HTTP/1.1')
+        self.shell.sendcontrol('c')
+        self.shell.waitprompt()
+
+
+    def test_main(self):
+        self.__git_clone()
+        self.__syncdb()
+        #self.__run_django_tests()
+        self.__test_dev_server()
+
+    def tearDown(self):
+        rmtree(self.tempdir)
+        self.shell.logfile_read.close()
+
+
 
 
 if __name__ == '__main__':
     if len(sys.argv) == 2:
-        branch = sys.argv[1]
+        DeploymentTestCase.branch = sys.argv[1]
     else:
-        branch = 'master'
-    main(branch)
+        DeploymentTestCase.branch = 'master'
+    #main(branch)
+    suite = unittest.TestLoader().loadTestsFromTestCase(DeploymentTestCase)
+    unittest.TextTestRunner(verbosity=2).run(suite)

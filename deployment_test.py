@@ -8,6 +8,19 @@ import re
 
 repository_url = 'git://github.com/troyand/universitytimetable.git'
 
+def check_cmd(self, cmd):
+    self.cmd(cmd)
+    cmd_output = self.before
+    self.cmd('echo $?')
+    cmd_result = int(self.before.splitlines()[1])
+    if cmd_result != 0:
+        raise Exception(
+                '%s: failed with exit status %d' % (
+                    cmd,
+                    cmd_result,
+                    )
+                )
+
 
 def main(branch):
     tempdir = mkdtemp()
@@ -26,6 +39,10 @@ def main(branch):
                 self.sendline(cmd) and self.waitprompt(),
                 shell
                 )
+        shell.check_cmd = types.MethodType(
+                check_cmd,
+                shell
+                )
         shell.sendline('export PS1="%s"' % shell.prompt)
         shell.waitprompt()
         shell.waitprompt()
@@ -33,18 +50,10 @@ def main(branch):
         origdir = shell.before.splitlines()[1]
         shell.cmd('cd %s' % tempdir)
         shell.cmd('pwd')
-        shell.cmd('git clone %s' % repository_url)
-        shell.cmd('echo $?')
-        result = int(shell.before.splitlines()[1])
-        if result != 0:
-            raise Exception('git clone failed')
+        shell.check_cmd('git clone %s' % repository_url)
         shell.cmd('ls')
         shell.cmd('cd universitytimetable')
-        shell.cmd('git checkout %s' % branch)
-        shell.cmd('echo $?')
-        result = int(shell.before.splitlines()[1])
-        if result != 0:
-            raise Exception('git branch switch failed for %s' % branch)
+        shell.check_cmd('git checkout %s' % branch)
         shell.cmd('cp %s/local_settings.py ./' % origdir)
         shell.sendline('python2.6 manage.py runserver')
         shell.expect_exact('Quit the server with CONTROL-C.')

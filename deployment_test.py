@@ -72,6 +72,13 @@ class DeploymentTestCase(unittest.TestCase):
 
     def __syncdb(self):
         self.shell.check_cmd('python manage.py syncdb --noinput')
+        # temp 'crutch' to make shell.before return what I want
+        # instead of '0' output from echo $?
+        self.shell.cmd('python manage.py syncdb')
+        syncdb_output = self.shell.before
+        # south marks the apps that need migrations with ' - ' in line beginning
+        for line in filter(lambda s: s.startswith(' - '), syncdb_output.splitlines()):
+            self.shell.check_cmd('python manage.py migrate %s' % line[3:])
 
     def __run_django_tests(self):
         self.shell.check_cmd('python manage.py test')

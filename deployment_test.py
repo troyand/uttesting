@@ -88,9 +88,23 @@ class DeploymentTestCase(unittest.TestCase):
         self.shell.expect_exact('Quit the server with CONTROL-C.')
         # workaround for fast boxes
         time.sleep(0.5)
-        response = urllib2.urlopen('http://127.0.0.1:8000').read()
-        title = re.findall(r'<title>([^<]*)</title>', response)[0]
+        try:
+            response = urllib2.urlopen('http://127.0.0.1:8000').read()
+            title = re.findall(r'<title>([^<]*)</title>', response)[0]
+        except urllib2.HTTPError:
+            pass
         self.shell.expect_exact('GET / HTTP/1.1', timeout=2)
+        self.shell.sendcontrol('c')
+        self.shell.waitprompt()
+
+    def __test_admin(self):
+        self.shell.sendline('python manage.py runserver')
+        self.shell.expect_exact('Quit the server with CONTROL-C.')
+        # workaround for fast boxes
+        time.sleep(0.5)
+        response = urllib2.urlopen('http://127.0.0.1:8000/admin/').read()
+        title = re.findall(r'<title>([^<]*)</title>', response)[0]
+        self.shell.expect_exact('GET /admin/ HTTP/1.1', timeout=2)
         self.shell.sendcontrol('c')
         self.shell.waitprompt()
 
@@ -102,6 +116,7 @@ class DeploymentTestCase(unittest.TestCase):
         self.__syncdb()
         #self.__run_django_tests()
         self.__test_dev_server()
+        self.__test_admin()
 
     def tearDown(self):
         rmtree(self.tempdir)
